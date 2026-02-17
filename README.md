@@ -1,10 +1,10 @@
-# 🤖 OpenClaw WeCom 企业微信插件
+# 🤖 OpenClaw 企业微信插件（支持直接加到微信）
 
 > ⭐ 如果觉得有用，请点击右上角的 **Star** 支持一下！
 
 ### 🔍 项目概述
 
-**openclaw-wecom** 是一个 [OpenClaw](https://openclaw.ai)（原 ClawdBot/Moltbot）的**企业微信渠道插件**，让你的 AI 智能体通过企业微信（WeCom）自建应用与用户对话。接入企业微信后，**个人微信用户也可以直接对话**（通过"我的企业 → 微信插件"扫码关联）。
+**openclaw-wecom** 是一个 [OpenClaw](https://openclaw.ai)（原 ClawdBot/Moltbot）的 <img src="docs/images/wecom-icon.png" width="16" height="16"> **企业微信渠道插件**，让你的 AI 智能体通过企业微信自建应用与用户对话。接入企业微信后，<img src="docs/images/wechat-icon.png" width="16" height="16"> **个人微信用户也可以直接对话**——只需在企业微信管理后台「我的企业 → 微信插件」中扫码关联即可。
 
 > 🍴 本项目 fork 自 [dingxiang-me/OpenClaw-Wechat](https://github.com/dingxiang-me/OpenClaw-Wechat)（v0.1.0，作者：勾勾的数字生命），并进行了大量功能扩展以兼容新版 OpenClaw。
 
@@ -239,6 +239,21 @@ curl https://你的域名/wecom/callback
 4. 回到企业微信管理后台，点击**保存**回调配置
 5. 如果验证通过，配置完成！🎉
 
+#### 第八步：关联个人微信 📱（可选）
+
+如果希望**个人微信**也能直接与 AI 对话，需在企业微信管理后台开启微信插件：
+
+1. 登录 [企业微信管理后台](https://work.weixin.qq.com/wework_admin/frame)
+2. 进入 **我的企业** → **微信插件**
+3. 用个人微信扫描页面上的二维码，关联到企业
+4. 关联后，个人微信中会出现企业的应用入口，直接发消息即可
+
+<p align="center">
+  <img src="docs/images/wecom2wechat.jpg" alt="企业微信管理后台 → 我的企业 → 微信插件" width="600">
+  <br>
+  <em>在企业微信管理后台「我的企业 → 微信插件」中，用个人微信扫码即可关联</em>
+</p>
+
 ### 🎙️ 本地语音转文字（stt.py）
 
 本 fork 新增了 `stt.py`，使用 [FunASR SenseVoice-Small](https://modelscope.cn/models/iic/SenseVoiceSmall) 模型进行本地语音识别，无需依赖企业微信自带的语音识别功能。
@@ -282,7 +297,7 @@ python3 stt.py /path/to/audio.wav
 2. 💬 发送文字、图片、语音、视频、文件消息
 3. 🤖 AI 会自动回复
 
-**个人微信接入：** 在微信中打开 "我的企业" → "微信插件"，用个人微信扫码关联即可。
+**<img src="docs/images/wechat-icon.png" width="16" height="16"> 个人微信接入：** 在企业微信管理后台「我的企业  → 微信插件」中，用个人微信扫码关联即可。
 
 #### 命令系统
 
