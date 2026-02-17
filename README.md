@@ -276,6 +276,8 @@ python3 stt.py /path/to/audio.wav
 
 > 💡 如果企业微信已开启语音识别（Recognition 字段），会优先使用企业微信的结果；仅在无 Recognition 字段时才会调用本地 STT。
 
+> 🤖 **AI Agent 自动部署：** 详细的多环境（CUDA / MPS / CPU）安装部署指南见 [`docs/stt-deploy-guide.md`](docs/stt-deploy-guide.md)，可供 Claude Code 等 AI 编程助手直接参照执行自动化安装。
+
 ### 📝 使用
 
 配置完成后，在企业微信或个人微信中找到你的应用，直接发送消息即可：
@@ -624,6 +626,8 @@ python3 stt.py /path/to/audio.wav
 ```
 
 > 💡 If WeCom provides a Recognition field (built-in STT), that is used first. Local STT is only invoked as a fallback.
+
+> 🤖 **AI Agent Auto-Deploy:** See [`docs/stt-deploy-guide.md`](docs/stt-deploy-guide.md) for a step-by-step multi-environment (CUDA / MPS / CPU) deployment guide designed for AI coding agents (Claude Code, Cursor, etc.) to follow automatically.
 
 ### 🔧 Environment Variables Reference
 
