@@ -178,23 +178,7 @@ npm install
 }
 ```
 
-#### 第五步：配置 Gateway 🌐
-
-确保 Gateway 配置允许外部连接：
-
-```json
-{
-  "gateway": {
-    "port": 18789,
-    "mode": "local",
-    "bind": "lan"
-  }
-}
-```
-
-> ⚠️ `bind` 必须为 `"lan"`（而非 `"localhost"`），否则企业微信回调无法到达。
-
-#### 第六步：配置公网访问 🔗
+#### 第五步：配置公网访问 🔗
 
 企业微信需要能够访问你的回调 URL。推荐使用 Cloudflare Tunnel：
 
@@ -215,7 +199,7 @@ cloudflared tunnel --url http://localhost:18789 run openclaw
 
 其他方案：SSH 隧道、Tailscale、Nginx 反向代理 + 端口转发等。
 
-#### 第七步：启动并验证 🚀
+#### 第六步：启动并验证 🚀
 
 1. 重启 OpenClaw Gateway：
 
@@ -239,7 +223,7 @@ curl https://你的域名/wecom/callback
 4. 回到企业微信管理后台，点击**保存**回调配置
 5. 如果验证通过，配置完成！🎉
 
-#### 第八步：关联个人微信 📱（可选）
+#### 第七步：关联个人微信 📱（可选）
 
 如果希望**个人微信**也能直接与 AI 对话，需在企业微信管理后台开启微信插件：
 
