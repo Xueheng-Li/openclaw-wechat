@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+.DS_Store
+*.log
+.idea/
+.vscode/
+agent_tasks/
+package-lock.json
+tmp/
+dist/
+__pycache__/
+*.pyc
