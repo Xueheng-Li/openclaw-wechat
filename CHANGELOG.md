@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3] - 2026-02-18
+
+### Fixed
+
+#### Outbound 消息支持
+- **修复 outbound 配置不生效问题**：OpenClaw 核心要求插件同时提供 `sendText` 和 `sendMedia`，之前只有 `sendText`，导致 `createPluginHandler` 返回 null，outbound 被判定为未配置
+- **新增 `outbound.sendMedia`**：支持通过 outbound 发送图片，失败时降级为文本+链接
+- **修复 `listAccountIds` 兼容性**：支持扁平配置（无 `accounts` 字段时），从顶层 `channels.wecom.corpId` 推断默认账户
+- **修复 `resolveAccount` 兼容性**：无 `accounts` 字段时，直接返回顶层 wecom 配置
+
+### Impact
+- 修复了 cron 定时任务、`message` tool 等通过 wecom outbound 发送消息失败的问题
+- isolated session 现在可以正常通过 wecom 主动发送消息
+
 ## [0.3.2] - 2026-01-29
 
 ### Added

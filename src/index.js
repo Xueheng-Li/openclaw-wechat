@@ -514,10 +514,36 @@ const WecomChannelPlugin = {
     },
     markdown: true, // 阶段三完成：支持 Markdown 转换
   },
+  messaging: {
+    targetResolver: {
+      hint: "Use a WeCom UserId (e.g. LiXueHeng) or wecom:UserId",
+      // Accept any non-empty string as a valid WeCom target (UserId)
+      looksLikeId: (raw, normalized) => {
+        if (!raw) return false;
+        // Accept wecom: prefixed targets
+        if (/^wecom:/i.test(raw)) return true;
+        // Accept any alphanumeric string (WeCom UserIds are typically alphanumeric)
+        if (/^[a-zA-Z0-9_.-]+$/.test(raw)) return true;
+        return false;
+      },
+    },
+  },
   config: {
-    listAccountIds: (cfg) => Object.keys(cfg.channels?.wecom?.accounts ?? {}),
-    resolveAccount: (cfg, accountId) =>
-      (cfg.channels?.wecom?.accounts?.[accountId ?? "default"] ?? { accountId }),
+    listAccountIds: (cfg) => {
+      const accounts = cfg.channels?.wecom?.accounts;
+      if (accounts && Object.keys(accounts).length > 0) return Object.keys(accounts);
+      if (cfg.channels?.wecom?.corpId) return ["default"];
+      return [];
+    },
+    resolveAccount: (cfg, accountId) => {
+      const id = accountId ?? "default";
+      const account = cfg.channels?.wecom?.accounts?.[id];
+      if (account) return account;
+      // 兼容扁平配置：直接返回顶层 wecom 配置
+      const wc = cfg.channels?.wecom;
+      if (wc?.corpId) return { accountId: id, corpId: wc.corpId, corpSecret: wc.corpSecret, agentId: wc.agentId };
+      return { accountId: id };
+    },
   },
   outbound: {
     deliveryMode: "direct",
@@ -532,6 +558,32 @@ const WecomChannelPlugin = {
         return { ok: false, error: new Error("WeCom not configured (check channels.wecom in clawdbot.json)") };
       }
       await sendWecomText({ corpId: config.corpId, corpSecret: config.corpSecret, agentId: config.agentId, toUser: to, text });
+      return { ok: true, provider: "wecom" };
+    },
+    sendMedia: async ({ to, text, mediaUrl }) => {
+      const config = getWecomConfig();
+      if (!config?.corpId || !config?.corpSecret || !config?.agentId) {
+        return { ok: false, error: new Error("WeCom not configured") };
+      }
+      const { corpId, corpSecret, agentId } = config;
+      // 尝试发送图片
+      if (mediaUrl) {
+        try {
+          const { buffer } = await fetchMediaFromUrl(mediaUrl);
+          const mediaId = await uploadWecomMedia({ corpId, corpSecret, type: "image", buffer, filename: "image.jpg" });
+          await sendWecomImage({ corpId, corpSecret, agentId, toUser: to, mediaId });
+        } catch (err) {
+          // 图片发送失败，降级为文本
+          if (text) {
+            await sendWecomText({ corpId, corpSecret, agentId, toUser: to, text: `${text}\n\n[图片: ${mediaUrl}]` });
+            return { ok: true, provider: "wecom" };
+          }
+        }
+      }
+      // 发送 caption 文本
+      if (text) {
+        await sendWecomText({ corpId, corpSecret, agentId, toUser: to, text });
+      }
       return { ok: true, provider: "wecom" };
     },
   },
