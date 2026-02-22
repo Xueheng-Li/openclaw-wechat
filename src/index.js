@@ -1241,7 +1241,7 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
         let voiceWavPath = null;
         try {
           const { buffer, contentType } = await downloadWecomMedia({ corpId, corpSecret, mediaId });
-          const tempDir = join(tmpdir(), "clawdbot-wecom");
+          const tempDir = join(tmpdir(), "openclaw-wecom");
           await mkdir(tempDir, { recursive: true });
           const ts = Date.now();
           voiceAmrPath = join(tempDir, `voice-${ts}.amr`);
@@ -1281,7 +1281,7 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
       api.logger.info?.(`wecom: received video message mediaId=${mediaId}`);
       try {
         const { buffer, contentType } = await downloadWecomMedia({ corpId, corpSecret, mediaId });
-        const tempDir = join(tmpdir(), "clawdbot-wecom");
+        const tempDir = join(tmpdir(), "openclaw-wecom");
         await mkdir(tempDir, { recursive: true });
         const videoTempPath = join(tempDir, `video-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`);
         await writeFile(videoTempPath, buffer);
@@ -1300,7 +1300,7 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
         const { buffer, contentType } = await downloadWecomMedia({ corpId, corpSecret, mediaId });
         const ext = fileName ? fileName.split('.').pop() : 'bin';
         const safeFileName = fileName || `file-${Date.now()}.${ext}`;
-        const tempDir = join(tmpdir(), "clawdbot-wecom");
+        const tempDir = join(tmpdir(), "openclaw-wecom");
         await mkdir(tempDir, { recursive: true });
         const fileTempPath = join(tempDir, `${Date.now()}-${safeFileName}`);
         await writeFile(fileTempPath, buffer);
@@ -1336,7 +1336,7 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
     if (imageBase64 && imageMimeType) {
       try {
         const ext = imageMimeType.includes("png") ? "png" : imageMimeType.includes("gif") ? "gif" : "jpg";
-        const tempDir = join(tmpdir(), "clawdbot-wecom");
+        const tempDir = join(tmpdir(), "openclaw-wecom");
         await mkdir(tempDir, { recursive: true });
         imageTempPath = join(tempDir, `image-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);
         await writeFile(imageTempPath, Buffer.from(imageBase64, "base64"));

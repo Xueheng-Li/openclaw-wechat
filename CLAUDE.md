@@ -71,7 +71,7 @@ Environment variables in `~/.openclaw/openclaw.json`:
 - Required: `WECOM_CORP_ID`, `WECOM_CORP_SECRET`, `WECOM_AGENT_ID`, `WECOM_CALLBACK_TOKEN`, `WECOM_CALLBACK_AES_KEY`
 - Optional: `WECOM_WEBHOOK_PATH` (default `/wecom/callback`), `WECOM_PROXY`
 
-Plugin manifest: `openclaw.plugin.json` (plugin ID: `clawdbot-wecom`)
+Plugin manifest: `openclaw.plugin.json` (plugin ID: `wecom`)
 
 ## Development Notes
 

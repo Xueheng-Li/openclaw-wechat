@@ -100,7 +100,7 @@ npm install
       ]
     },
     "entries": {
-      "clawdbot-wecom": {
+      "wecom": {
         "enabled": true
       }
     }
@@ -108,7 +108,7 @@ npm install
 }
 ```
 
-> 💡 **注意**：插件 ID 为 `clawdbot-wecom`（保持与上游兼容）。配置中请使用此 ID，而非 `openclaw-wechat`。
+> 💡 **注意**：插件 ID 为 `wecom`（与渠道名一致）。
 
 ### ⚙️ 配置（详细步骤）
 

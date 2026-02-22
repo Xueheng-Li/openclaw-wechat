@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.5] - 2026-02-22
+
+### Changed
+- **插件 ID 重命名**：`clawdbot-wecom` → `wecom`，与渠道名保持一致
+- **包名重命名**：`@mijia-life/clawdbot-wecom` → `@openclaw/wecom`
+- **临时目录重命名**：`clawdbot-wecom` → `openclaw-wecom`
+- 更新 README、CLAUDE.md 中相关引用
+
 ## [0.3.3] - 2026-02-18
 
 ### Fixed
