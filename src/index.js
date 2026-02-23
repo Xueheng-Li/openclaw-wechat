@@ -585,7 +585,8 @@ const WecomChannelPlugin = {
       if (!config?.corpId || !config?.corpSecret || !config?.agentId) {
         return { ok: false, error: new Error("WeCom not configured (check channels.wecom in clawdbot.json)") };
       }
-      await sendWecomText({ corpId: config.corpId, corpSecret: config.corpSecret, agentId: config.agentId, toUser: to, text });
+      const userId = to.startsWith("wecom:") ? to.slice(6) : to;
+      await sendWecomText({ corpId: config.corpId, corpSecret: config.corpSecret, agentId: config.agentId, toUser: userId, text });
       return { ok: true, provider: "wecom" };
     },
     sendMedia: async ({ to, text, mediaUrl }) => {
