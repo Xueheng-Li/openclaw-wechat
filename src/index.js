@@ -13,6 +13,10 @@ import { existsSync, appendFileSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
+
+const _require = createRequire(import.meta.url);
+const PLUGIN_VERSION = _require("../package.json").version;
 
 
 // --- Proxy support for WeCom API calls ---
@@ -1151,22 +1155,37 @@ async function handleClearCommand({ api, fromUser, corpId, corpSecret, agentId }
   return true;
 }
 
-async function handleStatusCommand({ api, fromUser, corpId, corpSecret, agentId }) {
+async function handleStatusCommand({ api, fromUser, corpId, corpSecret, agentId, sessionId }) {
   const config = getWecomConfig(api);
   const accountIds = listWecomAccountIds(api);
+
+  // 获取当前会话历史消息数量
+  const historyKey = sessionId || `wecom:${fromUser}`.toLowerCase();
+  const historyEntries = sessionHistories.get(historyKey) || [];
+  const historyCount = historyEntries.length;
+
+  // 检测语音 STT 是否可用
+  const sttPython = process.env.WECOM_STT_PYTHON || "python3";
+  const sttAvailable = sttPython !== "python3" || existsSync("/usr/bin/python3");
 
   const statusText = `📊 系统状态
 
 渠道：企业微信 (WeCom)
-会话ID：wecom:${fromUser}
+会话ID：${historyKey}
 账户ID：${config?.accountId || "default"}
 已配置账户：${accountIds.join(", ")}
-插件版本：0.3.0
+插件版本：${PLUGIN_VERSION}
+
+对话历史：${historyCount} 条（上限 ${DEFAULT_HISTORY_LIMIT} 条）
 
 功能状态：
 ✅ 文本消息
 ✅ 图片发送/接收
-✅ 消息分段 (2048字符)
+✅ 视频消息接收
+✅ 文件消息接收
+${sttAvailable ? "✅" : "⚠️"} 语音转文字 (STT)
+✅ 消息分段 (2048字节)
+✅ 对话历史记忆
 ✅ 命令系统
 ✅ Markdown 转换
 ✅ API 限流
@@ -1207,7 +1226,7 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
       const handler = COMMANDS[commandKey];
       if (handler) {
         api.logger.info?.(`wecom: handling command ${commandKey}`);
-        await handler({ api, fromUser, corpId, corpSecret, agentId, chatId, isGroupChat });
+        await handler({ api, fromUser, corpId, corpSecret, agentId, chatId, isGroupChat, sessionId });
         return; // 命令已处理，不再调用 AI
       }
     }

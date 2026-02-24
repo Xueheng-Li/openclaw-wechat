@@ -60,7 +60,6 @@
 
 #### 🚀 高级功能
 - [x] 👥 多账户支持（`WECOM_<ACCOUNT>_*` 格式）
-- [x] 💬 群聊支持
 - [x] 🔒 Token 并发安全（Promise 锁）
 - [x] 🖥️ Chat UI 集成（Transcript 写入 + Gateway 实时广播）
 - [x] 🌐 HTTP 代理支持（`WECOM_PROXY`）
@@ -492,7 +491,7 @@ openclaw-wechat/
 ├── stt.py                   # 🎙️ 本地语音识别（FunASR SenseVoice）
 ├── openclaw.plugin.json     # OpenClaw 插件描述文件（新格式）
 ├── clawdbot.plugin.json     # ClawdBot 插件描述文件（兼容旧版）
-├── package.json             # npm 包配置 (v0.3.1)
+├── package.json             # npm 包配置 (v0.3.6)
 ├── .env.example             # 环境变量示例
 ├── skills/
 │   └── wecom-notify/        # 📨 Claude Code WeCom 通知技能
