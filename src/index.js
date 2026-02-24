@@ -1,6 +1,11 @@
 import crypto from "node:crypto";
 import { XMLParser, XMLBuilder } from "fast-xml-parser";
-import { normalizePluginHttpPath } from "clawdbot/plugin-sdk";
+import {
+  normalizePluginHttpPath,
+  buildPendingHistoryContextFromMap,
+  recordPendingHistoryEntry,
+  clearHistoryEntriesIfEnabled,
+} from "clawdbot/plugin-sdk";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile, writeFile, unlink, mkdir, appendFile } from "node:fs/promises";
@@ -746,6 +751,10 @@ function broadcastToChatUI({ sessionKey, role, text, runId, state }) {
 const wecomAccounts = new Map(); // key: accountId, value: config
 let defaultAccountId = "default";
 
+// 会话历史存储（对标 Telegram guildHistories）
+const sessionHistories = new Map(); // key: sessionKey, value: Array<HistoryEntry>
+const DEFAULT_HISTORY_LIMIT = 20; // 默认保留最近20条消息
+
 // 获取 wecom 配置（支持多账户）
 // 优先级: channels.wecom > env.vars > 进程环境变量
 function getWecomConfig(api, accountId = null) {
@@ -1111,10 +1120,16 @@ async function handleHelpCommand({ api, fromUser, corpId, corpSecret, agentId })
 }
 
 async function handleClearCommand({ api, fromUser, corpId, corpSecret, agentId }) {
-  const sessionId = `wecom:${fromUser}`;
+  const sessionId = `wecom:${fromUser.toLowerCase()}`;
   try {
     await execFileAsync("clawdbot", ["session", "clear", "--session-id", sessionId], {
       timeout: 10000,
+    });
+    // 同时清除内存中的会话历史
+    clearHistoryEntriesIfEnabled({
+      historyMap: sessionHistories,
+      historyKey: sessionId,
+      limit: DEFAULT_HISTORY_LIMIT,
     });
     await sendWecomText({
       corpId, corpSecret, agentId, toUser: fromUser,
@@ -1122,6 +1137,12 @@ async function handleClearCommand({ api, fromUser, corpId, corpSecret, agentId }
     });
   } catch (err) {
     api.logger.warn?.(`wecom: failed to clear session: ${err.message}`);
+    // 即使 CLI 失败，也清除内存历史
+    clearHistoryEntriesIfEnabled({
+      historyMap: sessionHistories,
+      historyKey: sessionId,
+      limit: DEFAULT_HISTORY_LIMIT,
+    });
     await sendWecomText({
       corpId, corpSecret, agentId, toUser: fromUser,
       text: "会话已重置，请开始新的对话。",
@@ -1366,17 +1387,50 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
 
     // 格式化消息体
     const envelopeOptions = runtime.channel.reply.resolveEnvelopeFormatOptions(cfg);
-    const body = runtime.channel.reply.formatInboundEnvelope({
+    const chatType = isGroupChat ? "group" : "direct";
+    const formattedBody = runtime.channel.reply.formatInboundEnvelope({
       channel: "WeCom",
       from: fromUser,
       timestamp: Date.now(),
       body: messageText,
-      chatType: isGroupChat ? "group" : "direct",
+      chatType,
       sender: {
         name: fromUser,
         id: fromUser,
       },
-      ...envelopeOptions,
+      envelope: envelopeOptions,
+    });
+
+    // 拼接历史上下文（对标 Telegram/Mattermost 的 buildPendingHistoryContextFromMap）
+    const body = buildPendingHistoryContextFromMap({
+      historyMap: sessionHistories,
+      historyKey: sessionId,
+      limit: DEFAULT_HISTORY_LIMIT,
+      currentMessage: formattedBody,
+      formatEntry: (entry) =>
+        runtime.channel.reply.formatInboundEnvelope({
+          channel: "WeCom",
+          from: fromUser,
+          timestamp: entry.timestamp,
+          body: entry.body,
+          chatType,
+          senderLabel: entry.sender,
+          envelope: envelopeOptions,
+        }),
+    });
+
+    // 记录用户消息到会话历史（在 buildPendingHistoryContextFromMap 之后，
+    // 避免当前消息同时出现在历史区和当前消息区）
+    recordPendingHistoryEntry({
+      historyMap: sessionHistories,
+      historyKey: sessionId,
+      entry: {
+        sender: fromUser,
+        body: messageText,
+        timestamp: Date.now(),
+        messageId: `wecom-${Date.now()}`,
+      },
+      limit: DEFAULT_HISTORY_LIMIT,
     });
 
     // 构建 Session 上下文对象
@@ -1490,10 +1544,25 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
                 runId: outboundRunId,
                 state: info.kind === "final" ? "final" : "streaming",
               });
+
+              // AI 回复完成后，清除历史缓冲（对标 Telegram clearHistoryEntriesIfEnabled）
+              if (info.kind === "final") {
+                clearHistoryEntriesIfEnabled({
+                  historyMap: sessionHistories,
+                  historyKey: sessionId,
+                  limit: DEFAULT_HISTORY_LIMIT,
+                });
+              }
             }
           },
           onError: (err, info) => {
             api.logger.error?.(`wecom: ${info.kind} reply failed: ${String(err)}`);
+            // 失败时也清除历史缓冲，避免脏数据
+            clearHistoryEntriesIfEnabled({
+              historyMap: sessionHistories,
+              historyKey: sessionId,
+              limit: DEFAULT_HISTORY_LIMIT,
+            });
           },
         },
         replyOptions: {
