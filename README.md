@@ -231,7 +231,9 @@ curl -s https://ifconfig.me
 
 5. 添加上一步查到的 IP 地址
 
-> 💡 如果调用 API 报错 `60020`（not allow to access from your ip），检查日志中提示的 IP 并添加到白名单即可。
+> ⚠️ **IP 白名单是按应用隔离的**：每个自建应用（AgentId）有独立的「企业可信 IP」列表。为应用 A 添加的 IP **不会**自动对应用 B 生效。创建新应用后，必须单独为该应用添加可信 IP，否则会报 `60020` 错误。
+>
+> 💡 如果调用 API 报错 `60020`（not allow to access from your ip），检查日志中提示的 IP 并添加到**当前应用**的白名单即可。
 
 **动态 IP 场景（家用宽带 / 无固定公网 IP 的服务器）**：
 
