@@ -1470,6 +1470,7 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
       Timestamp: Date.now(),
       OriginatingChannel: "wecom",
       OriginatingTo: `wecom:${fromUser}`,
+      CommandAuthorized: true,
     };
 
     // 注册会话到 Sessions UI
