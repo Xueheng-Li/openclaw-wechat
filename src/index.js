@@ -228,6 +228,10 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isReasoningPayloadText(text) {
+  return typeof text === "string" && text.trimStart().startsWith("Reasoning:");
+}
+
 // 简单的限流器，防止触发企业微信 API 限流
 class RateLimiter {
   constructor({ maxConcurrent = 3, minInterval = 200 }) {
@@ -1671,6 +1675,10 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
         cfg,
         dispatcherOptions: {
           deliver: async (payload, info) => {
+            if (isReasoningPayloadText(payload.text)) {
+              api.logger.info?.(`wecom: skipping ${info.kind} reasoning payload`);
+              return;
+            }
             // 发送回复到企业微信
             if (payload.text) {
               api.logger.info?.(`wecom: delivering ${info.kind} reply, length=${payload.text.length}`);
