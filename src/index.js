@@ -670,10 +670,151 @@ const WecomChannelPlugin = {
       return { ok: true };
     },
   },
+  status: {
+    defaultRuntime: {
+      accountId: "default",
+      running: false,
+      lastStartAt: null,
+      lastStopAt: null,
+      lastError: null,
+      webhookPath: null,
+    },
+    collectStatusIssues: (accounts) =>
+      accounts.flatMap((account) => {
+        const issues = [];
+        if (!account.enabled) {
+          return issues;
+        }
+        if (!account.configured) {
+          issues.push({
+            channel: "wecom",
+            accountId: account.accountId,
+            kind: "config",
+            message: "WeCom account is missing corpId / corpSecret / agentId.",
+          });
+        }
+        const lastError = typeof account.lastError === "string" ? account.lastError.trim() : "";
+        if (lastError) {
+          issues.push({
+            channel: "wecom",
+            accountId: account.accountId,
+            kind: "runtime",
+            message: `Channel error: ${lastError}`,
+          });
+        }
+        return issues;
+      }),
+    buildChannelSummary: ({ snapshot }) => ({
+      configured: snapshot.configured ?? false,
+      running: snapshot.running ?? false,
+      webhookPath: snapshot.webhookPath ?? null,
+      lastStartAt: snapshot.lastStartAt ?? null,
+      lastStopAt: snapshot.lastStopAt ?? null,
+      lastError: snapshot.lastError ?? null,
+      probe: snapshot.probe,
+      lastProbeAt: snapshot.lastProbeAt ?? null,
+    }),
+    probeAccount: async ({ account, timeoutMs }) => {
+      if (!account?.corpId || !account?.corpSecret || !account?.agentId) {
+        return { ok: false, error: "corpId / corpSecret / agentId missing" };
+      }
+      const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 10000;
+      try {
+        await Promise.race([
+          getWecomAccessToken({ corpId: account.corpId, corpSecret: account.corpSecret }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("probe timeout")), timeout)),
+        ]);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+    buildAccountSnapshot: ({ account, runtime, probe }) => {
+      const configured = Boolean(account.corpId && account.corpSecret && account.agentId);
+      const running = runtime?.running ?? configured;
+      return {
+        accountId: account.accountId,
+        name: account.name ?? account.accountId,
+        enabled: account.enabled !== false,
+        configured,
+        running,
+        webhookPath: runtime?.webhookPath ?? account.webhookPath ?? "/wecom/callback",
+        lastStartAt: runtime?.lastStartAt ?? null,
+        lastStopAt: runtime?.lastStopAt ?? null,
+        lastError: runtime?.lastError ?? null,
+        probe,
+        lastInboundAt: runtime?.lastInboundAt ?? null,
+        lastOutboundAt: runtime?.lastOutboundAt ?? null,
+      };
+    },
+    resolveAccountState: ({ enabled, configured, running }) => {
+      if (enabled === false) return "disabled";
+      if (!configured) return "setup";
+      return running ? "ok" : "warn";
+    },
+  },
+  gateway: {
+    startAccount: async (ctx) => {
+      const account = getWecomConfig(pluginApi, ctx.accountId) ?? ctx.account;
+      const webhookPath = account?.webhookPath || "/wecom/callback";
+
+      if (!account || account.enabled === false) {
+        ctx.log?.info?.(`[${ctx.accountId}] WeCom account disabled, skipping`);
+        return;
+      }
+
+      if (!account.corpId || !account.corpSecret || !account.agentId) {
+        const reason = "WeCom account not fully configured";
+        ctx.setStatus?.({
+          accountId: ctx.accountId,
+          running: false,
+          webhookPath,
+          lastError: reason,
+        });
+        throw new Error(reason);
+      }
+
+      if (!pluginApi) {
+        throw new Error("WeCom plugin API not initialized");
+      }
+
+      ctx.setStatus?.({
+        accountId: ctx.accountId,
+        running: true,
+        webhookPath,
+        lastStartAt: new Date().toISOString(),
+        lastError: null,
+      });
+      ctx.log?.info?.(`[${ctx.accountId}] starting provider (webhook: ${webhookPath})`);
+
+      const waitForAbort = new Promise((resolve) => {
+        if (ctx.abortSignal?.aborted) {
+          resolve();
+          return;
+        }
+        ctx.abortSignal?.addEventListener("abort", resolve, { once: true });
+      });
+
+      try {
+        await waitForAbort;
+      } finally {
+        ctx.log?.info?.(`[${ctx.accountId}] stopping provider`);
+      }
+    },
+    stopAccount: async (ctx) => {
+      ctx.setStatus?.({
+        accountId: ctx.accountId,
+        running: false,
+        lastStopAt: new Date().toISOString(),
+      });
+      ctx.log?.info?.(`[${ctx.accountId}] WeCom account stopped`);
+    },
+  },
 };
 
 // 存储 runtime 引用以便在消息处理中使用
 let gatewayRuntime = null;
+let pluginApi = null;
 
 // 存储 gateway broadcast 上下文，用于向 Chat UI 广播消息
 let gatewayBroadcastCtx = null;
@@ -886,6 +1027,7 @@ function listWecomAccountIds(api) {
 export default function register(api) {
   // 保存 runtime 引用
   gatewayRuntime = api.runtime;
+  pluginApi = api;
 
   // 初始化配置
   const cfg = getWecomConfig(api);
@@ -938,6 +1080,8 @@ export default function register(api) {
 
   api.registerHttpRoute({
     path: normalizedPath,
+    auth: "plugin",
+    match: "exact",
     handler: async (req, res) => {
       const config = getWecomConfig(api);
       const token = config?.callbackToken;
@@ -949,7 +1093,6 @@ export default function register(api) {
       const nonce = url.searchParams.get("nonce") ?? "";
       const echostr = url.searchParams.get("echostr") ?? "";
 
-      // Health check
       if (req.method === "GET" && !echostr) {
         res.statusCode = token && aesKey ? 200 : 500;
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -965,7 +1108,6 @@ export default function register(api) {
       }
 
       if (req.method === "GET") {
-        // URL verification
         const expected = computeMsgSignature({ token, timestamp, nonce, encrypt: echostr });
         if (!msg_signature || expected !== msg_signature) {
           res.statusCode = 401;
@@ -1005,16 +1147,12 @@ export default function register(api) {
         return;
       }
 
-      // ACK quickly (WeCom expects fast response within 5 seconds)
       res.statusCode = 200;
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.end("success");
 
       const { msg: decryptedXml } = decryptWecom({ aesKey, cipherTextBase64: encrypt });
       const msgObj = parseIncomingXml(decryptedXml);
-
-      // 检测是否为群聊消息
-      // 企业微信群聊消息会有 ChatId 字段（外部群）或通过应用消息接收
       const chatId = msgObj.ChatId || null;
       const isGroupChat = !!chatId;
 
@@ -1025,7 +1163,6 @@ export default function register(api) {
       const fromUser = msgObj.FromUserName;
       const msgType = msgObj.MsgType;
 
-      // 异步处理消息，不阻塞响应
       if (msgType === "text" && msgObj?.Content) {
         processInboundMessage({ api, fromUser, content: msgObj.Content, msgType: "text", chatId, isGroupChat }).catch((err) => {
           api.logger.error?.(`wecom: async message processing failed: ${err.message}`);
@@ -1035,7 +1172,6 @@ export default function register(api) {
           api.logger.error?.(`wecom: async image processing failed: ${err.message}`);
         });
       } else if (msgType === "voice" && msgObj?.MediaId) {
-        // Recognition 字段包含企业微信自动语音识别的结果（需要在企业微信后台开启）
         processInboundMessage({ api, fromUser, mediaId: msgObj.MediaId, msgType: "voice", recognition: msgObj.Recognition, chatId, isGroupChat }).catch((err) => {
           api.logger.error?.(`wecom: async voice processing failed: ${err.message}`);
         });
@@ -1061,7 +1197,6 @@ export default function register(api) {
           api.logger.error?.(`wecom: async file processing failed: ${err.message}`);
         });
       } else if (msgType === "link") {
-        // 链接分享消息
         processInboundMessage({
           api, fromUser,
           msgType: "link",
@@ -1166,7 +1301,8 @@ async function handleStatusCommand({ api, fromUser, corpId, corpSecret, agentId,
 
   // 检测语音 STT 是否可用
   const sttPython = process.env.WECOM_STT_PYTHON || "python3";
-  const sttAvailable = sttPython !== "python3" || existsSync("/usr/bin/python3");
+  const sttUrl = process.env.WECOM_STT_URL || "";
+  const sttAvailable = sttUrl || sttPython !== "python3" || existsSync("/usr/bin/python3");
 
   const statusText = `📊 系统状态
 
@@ -1183,7 +1319,7 @@ async function handleStatusCommand({ api, fromUser, corpId, corpSecret, agentId,
 ✅ 图片发送/接收
 ✅ 视频消息接收
 ✅ 文件消息接收
-${sttAvailable ? "✅" : "⚠️"} 语音转文字 (STT)
+${sttAvailable ? "✅" : "⚠️"} 语音转文字 (STT${sttUrl ? " - 远程Qwen3-ASR" : ""})
 ✅ 消息分段 (2048字节)
 ✅ 对话历史记忆
 ✅ 命令系统
@@ -1294,10 +1430,12 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
           await execFileAsync("ffmpeg", ["-y", "-i", voiceAmrPath, "-ar", "16000", "-ac", "1", voiceWavPath], { timeout: 10000 });
           api.logger.info?.(`wecom: converted voice to WAV`);
 
-          // Whisper STT
+          // STT: remote Qwen3-ASR (via WECOM_STT_URL) with local FunASR fallback
           const sttScriptPath = join(dirname(new URL(import.meta.url).pathname), "..", "stt.py");
           const _sttPython = process.env.WECOM_STT_PYTHON || "python3";
-          const { stdout } = await execFileAsync(_sttPython, [sttScriptPath, voiceWavPath], { timeout: 30000 });
+          const sttEnv = { ...process.env };
+          if (process.env.WECOM_STT_URL) sttEnv.WECOM_STT_URL = process.env.WECOM_STT_URL;
+          const { stdout } = await execFileAsync(_sttPython, [sttScriptPath, voiceWavPath], { timeout: 60000, env: sttEnv });
           const transcription = stdout.trim();
           api.logger.info?.(`wecom: transcribed voice: ${transcription.slice(0, 80)}`);
 

@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.7] - 2026-03-07
+
+### Fixed
+
+#### OpenClaw 2026.3+ 兼容性
+- **补齐 `status` 运行态信息**：新增 `defaultRuntime`、`buildChannelSummary`、`buildAccountSnapshot`、`probeAccount`，使 WeCom 渠道能被新版 Gateway 正确纳入 health monitor
+- **修复 `gateway.startAccount` 生命周期**：启动后保持常驻，直到 `abortSignal` 触发再退出，避免被新版 Gateway 误判为 `stopped` 并持续自动重启
+- **Webhook 路由显式声明**：为 `api.registerHttpRoute()` 增加 `auth: "plugin"` 和 `match: "exact"`，兼容 OpenClaw 2026.3+ 的 HTTP 路由要求，避免 `/wecom/callback` 被 Control UI 的 SPA fallback 覆盖
+- **恢复 webhook 接收链路**：保留全局 `registerHttpRoute` 注册方式，确保回调 URL 直接命中插件处理器，`curl /wecom/callback` 返回 `wecom webhook ok`
+
+#### 生产配置排查经验
+- **补充 AgentId 绑定说明**：确认企业微信后台的 `AgentId`、`Secret`、`Token`、`EncodingAESKey` 必须与 OpenClaw 本地配置完全一致，否则会出现“能发不能收”
+- **验证通过的真实案例**：一次实际故障中，本机错误绑定到 `agentId=1000002`，而企业微信后台配置的是 `agentId=1000003`；切换到正确应用后，入站回调、AI 处理、自动回复全部恢复正常
+
+### Changed
+- README 新增 OpenClaw 2026.3+ 兼容说明、升级后的验证步骤、以及 `AgentId` 对齐检查项
+- 包版本升级至 `0.3.7`
+
 ## [0.3.5] - 2026-02-22
 
 ### Changed

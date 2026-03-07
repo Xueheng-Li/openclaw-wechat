@@ -8,6 +8,15 @@
 
 > 🍴 本项目 fork 自 [dingxiang-me/OpenClaw-Wechat](https://github.com/dingxiang-me/OpenClaw-Wechat)（v0.1.0，作者：勾勾的数字生命），并进行了大量功能扩展以兼容新版 OpenClaw。
 
+### 🧠 v0.3.7 — OpenClaw 2026.3+ 兼容修复
+
+**修复了 OpenClaw 2026.3+ 中企业微信“能发不能收”的典型故障**，核心兼容点包括：
+- ✅ 补齐 `status` 运行态信息，避免 health-monitor 持续误判渠道已停止
+- ✅ `gateway.startAccount` 改为常驻直到 `abortSignal`，不再反复 auto-restart
+- ✅ `registerHttpRoute()` 显式增加 `auth: "plugin"` 和 `match: "exact"`
+- ✅ `/wecom/callback` 不再被 Control UI 的 SPA fallback 覆盖，健康检查稳定返回 `wecom webhook ok`
+- ✅ 实战验证：错误绑定 `AgentId` 也会导致“能发不能收”，现在 README 已加入对齐检查
+
 ### 🧠 v0.3.6 — 对话记忆系统（与官方 Telegram Channel 实现一致）
 
 **解决了企业微信渠道"失忆"问题**：之前每条消息都是独立对话，AI 无法记住上下文。
@@ -20,14 +29,14 @@
 
 ### ✨ 与上游的主要区别
 
-| 特性 | 上游 (OpenClaw-Wechat v0.1.0) | 本 Fork (v0.3.6) |
+| 特性 | 上游 (OpenClaw-Wechat v0.1.0) | 本 Fork (v0.3.7) |
 |------|------|------|
 | 🎯 平台兼容 | ClawdBot | OpenClaw（同时保留 ClawdBot 兼容） |
 | 📄 插件描述文件 | `clawdbot.plugin.json` | `openclaw.plugin.json` + `clawdbot.plugin.json` |
 | ⚙️ 配置文件 | `~/.clawdbot/clawdbot.json` | `~/.openclaw/openclaw.json` |
 | 📨 消息类型 | 文本、图片、语音 | 文本、图片、语音、**视频**、**文件**、**链接** |
 | 📤 发送类型 | 仅文本 | 文本、**图片**、**视频**、**文件**（自动类型识别） |
-| 🎙️ 语音识别 | 仅企业微信自带 | 企业微信自带 + **本地 FunASR SenseVoice STT** |
+| 🎙️ 语音识别 | 仅企业微信自带 | 企业微信自带 + **远程 Qwen3-ASR** / 本地 FunASR（自动降级） |
 | 🧠 对话历史 | 无 | **SDK 级对话记忆（与官方 Telegram 一致）** |
 | 🖥️ Chat UI | 无 | **消息同步到 Transcript + 实时广播** |
 | 🌐 代理支持 | 无 | **WECOM_PROXY 环境变量** |
@@ -41,11 +50,12 @@
 - [x] ✅ 自动调用 AI 代理处理消息
 - [x] ✅ 消息签名验证（SHA1）和 AES-256-CBC 加解密
 - [x] ✅ Webhook URL 验证
+- [x] ✅ OpenClaw 2026.3+ 渠道生命周期兼容
 - [x] ✅ access_token 自动缓存和刷新
 
 #### 🎬 媒体功能
 - [x] 🖼️ 图片消息收发 + AI Vision 识别
-- [x] 🎙️ 语音消息转文字（企业微信自带 + 本地 FunASR SenseVoice）
+- [x] 🎙️ 语音消息转文字（企业微信自带 + 远程 Qwen3-ASR + 本地 FunASR 降级）
 - [x] 📹 视频消息接收、下载、发送
 - [x] 📎 文件消息接收（支持 .txt/.md/.json/.pdf 等自动读取）
 - [x] 🔗 链接分享消息接收
@@ -63,6 +73,36 @@
 - [x] 🔒 Token 并发安全（Promise 锁）
 - [x] 🖥️ Chat UI 集成（Transcript 写入 + Gateway 实时广播）
 - [x] 🌐 HTTP 代理支持（`WECOM_PROXY`）
+- [x] 🩺 渠道状态探测（status/probe，兼容新版 OpenClaw health monitor）
+
+### 🆕 OpenClaw 2026.3+ 兼容说明
+
+OpenClaw 2026.3+ 对渠道插件的要求比旧版本更严格。企业微信插件如果只保留旧版写法，常见症状是：
+
+- 能主动发送消息
+- `/wecom/callback` 返回的是 Control UI HTML，而不是 `wecom webhook ok`
+- `health-monitor` 日志里反复出现 `restarting (reason: stopped)`
+- 企业微信后台显示消息发送成功，但 OpenClaw 没有任何 `wecom inbound` 日志
+
+本插件从 `v0.3.7` 起已补齐以下兼容点：
+
+- `status`：提供运行态摘要、账户快照、探测结果
+- `gateway.startAccount`：保持常驻直到 `abortSignal`
+- `api.registerHttpRoute()`：显式使用 `auth: "plugin"` 和 `match: "exact"`
+
+如果你升级到 OpenClaw `2026.3.x` 或更高版本，建议至少验证这三项：
+
+```bash
+openclaw channels status --probe
+curl https://你的域名/wecom/callback
+openclaw logs -f | grep wecom
+```
+
+期望结果：
+
+- 渠道状态显示 `running`
+- callback 返回 `wecom webhook ok`
+- 收到消息时能看到 `wecom inbound:`、`session registered`、`sent AI reply`
 
 ### 📊 支持的消息类型
 
@@ -70,7 +110,7 @@
 |:----:|:----:|:----:|------|
 | 📝 文本 | ✅ | ✅ | 完全支持，超长消息自动按字节分段 |
 | 🖼️ 图片 | ✅ | ✅ | 支持 AI Vision 识别，下载后保存到临时文件 |
-| 🎙️ 语音 | ✅ | ❌ | 企业微信自带识别 + 本地 FunASR SenseVoice STT（AMR→WAV→文本） |
+| 🎙️ 语音 | ✅ | ❌ | 企业微信自带识别 + 远程 Qwen3-ASR / 本地 FunASR 降级（AMR→WAV→文本） |
 | 📹 视频 | ✅ | ✅ | 自动下载保存，支持发送视频消息 |
 | 📎 文件 | ✅ | ✅ | 自动下载，可读类型自动交给 AI 分析 |
 
@@ -80,7 +120,9 @@
 - Node.js 环境（npm 可用）
 - 企业微信管理员权限
 - 公网可访问的服务器或隧道（用于接收企业微信回调）
-- （可选）Python 3 + [FunASR](https://github.com/modelscope/FunASR) + PyTorch + FFmpeg —— 用于本地语音转文字（支持 CUDA / Apple MPS / CPU）
+- （可选）FFmpeg + 语音转文字后端（二选一）：
+  - **远程 Qwen3-ASR**（推荐）：需要 GPU 服务器运行 `asr_server.py`，详见 [`asr_api_README.md`](asr_api_README.md)
+  - **本地 FunASR**：Python 3 + [FunASR](https://github.com/modelscope/FunASR) + PyTorch（支持 CUDA / Apple MPS / CPU）
 
 ### 🛠️ 安装
 
@@ -145,6 +187,8 @@ npm install
    - **Token**：自定义一个 Token（随机字符串）
    - **EncodingAESKey**：点击随机生成
 3. ⚠️ **先不要保存！** 需要先完成后续步骤启动 OpenClaw 服务
+
+> ⚠️ **务必记住这组配置与具体应用绑定**：`AgentId`、`Secret`、`Token`、`EncodingAESKey` 是针对某一个企业微信自建应用的，不能和另一套应用参数混用。混用时常见现象是“OpenClaw 可以发消息，但收不到你从企业微信发回来的消息”。
 
 #### 第四步：配置环境变量 🔑
 
@@ -283,6 +327,33 @@ curl https://你的域名/wecom/callback
 4. 回到企业微信管理后台，点击**保存**回调配置
 5. 如果验证通过，配置完成！🎉
 
+#### 第七步补充：核对 AgentId 与回调参数是否是同一套应用
+
+这一步非常关键，尤其是你创建过多个自建应用时。
+
+必须逐项一致：
+
+- 企业微信后台显示的 `AgentId`
+- OpenClaw 配置里的 `WECOM_AGENT_ID` / `channels.wecom.agentId`
+- 当前应用对应的 `Secret`
+- 当前应用对应的 `Token`
+- 当前应用对应的 `EncodingAESKey`
+
+推荐这样核对：
+
+```bash
+openclaw config get channels.wecom
+curl https://你的域名/wecom/callback
+```
+
+如果你遇到下面这种情况，优先怀疑绑错了应用：
+
+- OpenClaw 主动发消息给你能成功
+- 你从企业微信回消息后，日志里没有新的 `wecom inbound`
+- callback 健康检查正常，但回调始终不进插件
+
+一个真实案例是：本机误绑到 `agentId=1000002`，而企业微信后台实际配置的是 `agentId=1000003`。切回正确应用后，入站和回复立即恢复。
+
 #### 第八步：关联个人微信 📱（可选）
 
 如果希望**个人微信**也能直接与 AI 对话，需在企业微信管理后台开启微信插件：
@@ -298,17 +369,55 @@ curl https://你的域名/wecom/callback
   <em>在企业微信管理后台「我的企业 → 微信插件」中，用个人微信扫码即可关联</em>
 </p>
 
-### 🎙️ 本地语音转文字（stt.py）
+### 🎙️ 语音转文字（stt.py）
 
-本 fork 新增了 `stt.py`，使用 [FunASR SenseVoice-Small](https://modelscope.cn/models/iic/SenseVoiceSmall) 模型进行本地语音识别，无需依赖企业微信自带的语音识别功能。
+`stt.py` 支持两种语音识别模式，自动选择最优方案：
+
+| 模式 | 模型 | 运行位置 | 配置 |
+|------|------|---------|------|
+| 🌐 远程 ASR（推荐） | [Qwen3-ASR-0.6B](https://modelscope.cn/models/Qwen/Qwen3-ASR-0.6B) | GPU 服务器 | 设置 `WECOM_STT_URL` |
+| 💻 本地 ASR（降级） | [FunASR SenseVoice-Small](https://modelscope.cn/models/iic/SenseVoiceSmall) | 本地 CPU/MPS/CUDA | 设置 `WECOM_STT_PYTHON` |
+
+**优先级：** 企业微信自带识别 → 远程 Qwen3-ASR → 本地 FunASR
 
 **工作流程：**
 1. 收到语音消息 → 下载 AMR 音频文件
 2. 使用 FFmpeg 转换为 WAV（16kHz 单声道）
-3. 调用 `stt.py` 进行 FunASR SenseVoice 语音识别
+3. 调用 `stt.py`：优先 POST 到远程 ASR 服务，失败时降级到本地 FunASR
 4. 将识别结果作为文本消息发送给 AI 代理
 
-**依赖安装：**
+**方式一：远程 ASR（推荐）**
+
+在 `openclaw.json` 中配置远程 ASR 服务地址：
+
+```jsonc
+"env": {
+  "vars": {
+    "WECOM_STT_URL": "http://your-gpu-server:8990/transcribe"
+  }
+}
+```
+
+远程 ASR 服务部署详情参见 [`asr_api_README.md`](asr_api_README.md)。快速搭建：
+
+```bash
+# GPU 服务器上
+python3 -m venv ~/qwen-asr-env && source ~/qwen-asr-env/bin/activate
+pip install qwen-asr fastapi uvicorn python-multipart
+
+# 下载模型（首次需联网）
+python3 -c "from modelscope import snapshot_download; snapshot_download('Qwen/Qwen3-ASR-0.6B')"
+
+# 启动服务
+TRANSFORMERS_OFFLINE=1 python3 asr_server.py
+# 监听 0.0.0.0:8990，POST /transcribe 接收音频，GET /health 健康检查
+```
+
+生产部署建议使用 systemd 服务（`Restart=always`），详见 [`asr_api_README.md`](asr_api_README.md)。
+
+**性能参考（RTX 4090D）：** 模型加载 ~3.7s，显存占用 ~3.7GB，短语音 ~2-4s 推理，支持 52 种语言 + 22 种中国方言。
+
+**方式二：本地 FunASR（无 GPU 服务器时）**
 
 ```bash
 # FFmpeg（音频格式转换）
@@ -326,6 +435,10 @@ pip install funasr modelscope torch torchaudio torchcodec
 **独立使用：**
 
 ```bash
+# 远程模式
+WECOM_STT_URL=http://gpu-server:8990/transcribe python3 stt.py /path/to/audio.wav
+
+# 本地模式
 python3 stt.py /path/to/audio.wav
 ```
 
@@ -386,6 +499,26 @@ openclaw logs -f | grep wecom
 2. 确认 AI 模型配置正确（检查 `agents.defaults.model`）
 3. 检查是否有错误日志
 
+如果完全没有 `wecom inbound` 记录，再重点排查这 4 项是否来自**同一个自建应用**：
+
+1. `AgentId`
+2. `Secret`
+3. `Token`
+4. `EncodingAESKey`
+
+很多“能发不能收”不是模型问题，而是本机绑定到了错误的企业微信应用。
+
+#### ❌ OpenClaw 2026.3+ 升级后，`/wecom/callback` 返回 Control UI 页面
+
+这是新版 Gateway 兼容问题的典型症状。请确认：
+
+1. 插件版本至少为 `0.3.7`
+2. `openclaw channels status --probe` 中 WeCom 账户状态为 `running`
+3. `curl https://你的域名/wecom/callback` 返回 `wecom webhook ok`
+4. 日志中不再出现持续的 `health-monitor: restarting (reason: stopped)`
+
+如果第 3 项返回的是 HTML 页面，通常说明 webhook 路由没有正确命中插件处理器。
+
 #### ❌ access_token 获取失败
 
 1. 确认 `WECOM_CORP_ID` 和 `WECOM_CORP_SECRET` 正确
@@ -406,9 +539,10 @@ OpenClaw 要求插件同时提供 `sendText` **和** `sendMedia` 两个出站方
 #### ❌ 语音识别失败
 
 1. 确认已安装 FFmpeg：`ffmpeg -version`
-2. 确认已安装 Python 依赖：`python3 -c "from funasr import AutoModel"`
-3. 首次运行会从 ModelScope 下载模型（约 1GB），需要网络连接
-4. `stt.py` 会自动检测设备：CUDA GPU → Apple MPS → CPU（按优先级依次降级）
+2. 如果使用远程 ASR：检查 `WECOM_STT_URL` 是否可达（`curl $WECOM_STT_URL`），检查 GPU 服务器上 `qwen3-asr.service` 是否运行
+3. 如果使用本地 FunASR：确认已安装 Python 依赖 `python3 -c "from funasr import AutoModel"`
+4. 首次本地运行会从 ModelScope 下载模型（约 1GB），需要网络连接
+5. 本地 `stt.py` 会自动检测设备：CUDA GPU → Apple MPS → CPU（按优先级依次降级）
 
 #### ❌ 语音消息发送了但 AI 没收到内容
 
@@ -476,7 +610,7 @@ Node.js 原生 `fetch()` **不支持** `HTTPS_PROXY` 环境变量。插件使用
 5. 🔄 异步处理：根据消息类型分发处理
    - 📝 文本 → 直接交给 AI
    - 🖼️ 图片 → 下载保存 → AI Vision 分析
-   - 🎙️ 语音 → 下载 AMR → FFmpeg 转 WAV → FunASR STT → 文本交给 AI
+   - 🎙️ 语音 → 下载 AMR → FFmpeg 转 WAV → 远程 Qwen3-ASR / 本地 FunASR → 文本交给 AI
    - 📹 视频/📎 文件 → 下载保存 → 通知 AI
    - 🔗 链接 → 提取元信息 → 交给 AI
 6. 🤖 AI 代理生成回复
@@ -490,10 +624,11 @@ openclaw-wechat/
 ├── index.js                 # 入口文件（重导出）
 ├── src/
 │   └── index.js             # 插件主逻辑（1400+ 行）
-├── stt.py                   # 🎙️ 本地语音识别（FunASR SenseVoice）
+├── stt.py                   # 🎙️ 语音识别（远程 Qwen3-ASR + 本地 FunASR 降级）
+├── asr_server.py            # 🖥️ 远程 ASR 服务（FastAPI + Qwen3-ASR，部署到 GPU 服务器）
 ├── openclaw.plugin.json     # OpenClaw 插件描述文件（新格式）
 ├── clawdbot.plugin.json     # ClawdBot 插件描述文件（兼容旧版）
-├── package.json             # npm 包配置 (v0.3.6)
+├── package.json             # npm 包配置 (v0.3.7)
 ├── .env.example             # 环境变量示例
 ├── skills/
 │   └── wecom-notify/        # 📨 Claude Code WeCom 通知技能
