@@ -938,6 +938,7 @@ export default function register(api) {
 
   api.registerHttpRoute({
     path: normalizedPath,
+    auth: "plugin",
     handler: async (req, res) => {
       const config = getWecomConfig(api);
       const token = config?.callbackToken;
