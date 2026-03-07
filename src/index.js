@@ -232,6 +232,24 @@ function isReasoningPayloadText(text) {
   return typeof text === "string" && text.trimStart().startsWith("Reasoning:");
 }
 
+function normalizeWecomSenderValue(value, fallback = "unknown") {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || fallback;
+  }
+  if (typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value && typeof value === "object") {
+    const nested =
+      normalizeWecomSenderValue(value.name, "") ||
+      normalizeWecomSenderValue(value.username, "") ||
+      normalizeWecomSenderValue(value.id, "");
+    return nested || fallback;
+  }
+  return fallback;
+}
+
 // 简单的限流器，防止触发企业微信 API 限流
 class RateLimiter {
   constructor({ maxConcurrent = 3, minInterval = 200 }) {
@@ -1164,7 +1182,7 @@ export default function register(api) {
         `wecom inbound: FromUserName=${msgObj?.FromUserName} MsgType=${msgObj?.MsgType} ChatId=${chatId || "N/A"} Content=${(msgObj?.Content ?? "").slice?.(0, 80)}`
       );
 
-      const fromUser = msgObj.FromUserName;
+      const fromUser = normalizeWecomSenderValue(msgObj.FromUserName);
       const msgType = msgObj.MsgType;
 
       if (msgType === "text" && msgObj?.Content) {
@@ -1353,11 +1371,12 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
   }
 
   const { corpId, corpSecret, agentId } = config;
+  const senderLabel = normalizeWecomSenderValue(fromUser);
 
   try {
     // 会话ID：群聊使用 wecom:group:chatId，私聊使用 wecom:userId
     // 注意：sessionKey 需要统一为小写，与 resolveAgentRoute 保持一致
-    const sessionId = isGroupChat ? `wecom:group:${chatId}`.toLowerCase() : `wecom:${fromUser}`.toLowerCase();
+    const sessionId = isGroupChat ? `wecom:group:${chatId}`.toLowerCase() : `wecom:${senderLabel}`.toLowerCase();
     api.logger.info?.(`wecom: processing ${msgType} message for session ${sessionId}${isGroupChat ? " (group)" : ""}`);
 
     // 命令检测（仅对文本消息）
@@ -1551,13 +1570,13 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
     const chatType = isGroupChat ? "group" : "direct";
     const formattedBody = runtime.channel.reply.formatInboundEnvelope({
       channel: "WeCom",
-      from: fromUser,
+      from: senderLabel,
       timestamp: Date.now(),
       body: messageText,
       chatType,
       sender: {
-        name: fromUser,
-        id: fromUser,
+        name: senderLabel,
+        id: senderLabel,
       },
       envelope: envelopeOptions,
     });
@@ -1571,11 +1590,11 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
       formatEntry: (entry) =>
         runtime.channel.reply.formatInboundEnvelope({
           channel: "WeCom",
-          from: fromUser,
+          from: senderLabel,
           timestamp: entry.timestamp,
           body: entry.body,
           chatType,
-          senderLabel: entry.sender,
+          senderLabel: normalizeWecomSenderValue(entry.sender),
           envelope: envelopeOptions,
         }),
     });
@@ -1586,7 +1605,7 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
       historyMap: sessionHistories,
       historyKey: sessionId,
       entry: {
-        sender: fromUser,
+        sender: senderLabel,
         body: messageText,
         timestamp: Date.now(),
         messageId: `wecom-${Date.now()}`,
@@ -1603,9 +1622,9 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
       SessionKey: sessionId,
       AccountId: config.accountId || "default",
       ChatType: isGroupChat ? "group" : "direct",
-      ConversationLabel: fromUser,
-      SenderName: fromUser,
-      SenderId: fromUser,
+      ConversationLabel: senderLabel,
+      SenderName: senderLabel,
+      SenderId: senderLabel,
       Provider: "wecom",
       Surface: "wecom",
       MessageSid: `wecom-${Date.now()}`,
@@ -1623,7 +1642,7 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
       updateLastRoute: !isGroupChat ? {
         sessionKey: sessionId,
         channel: "wecom",
-        to: fromUser,
+        to: senderLabel,
         accountId: config.accountId || "default",
       } : undefined,
       onRecordError: (err) => {
@@ -1688,11 +1707,11 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
                 corpId,
                 corpSecret,
                 agentId,
-                toUser: fromUser,
+                toUser: senderLabel,
                 text: formattedReply,
                 logger: api.logger,
               });
-              api.logger.info?.(`wecom: sent AI reply to ${fromUser}: ${formattedReply.slice(0, 50)}...`);
+              api.logger.info?.(`wecom: sent AI reply to ${senderLabel}: ${formattedReply.slice(0, 50)}...`);
 
               // 写入 AI 回复到 transcript 文件（使 Chat UI 可以显示历史）
               await writeToTranscript({
@@ -1753,7 +1772,7 @@ async function processInboundMessage({ api, fromUser, content, msgType, mediaId,
         corpId,
         corpSecret,
         agentId,
-        toUser: fromUser,
+        toUser: senderLabel,
         text: `抱歉，处理您的消息时出现错误，请稍后重试。\n错误: ${err.message?.slice(0, 100) || "未知错误"}`,
         logger: api.logger,
       });
